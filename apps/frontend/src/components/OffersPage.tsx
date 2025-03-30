@@ -6,133 +6,92 @@ import { Comment, Offer } from "./offers/types";
 const OffersPage = () => {
   const [offers, setOffers] = useState<Offer[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [comments, setComments] = useState<Record<string, Comment[]>>({});
   const [newComment, setNewComment] = useState<Record<string, string>>({});
-  const [expandedOffers, setExpandedOffers] = useState<Record<string, boolean>>(
-    {}
-  );
+  const [expandedOffers, setExpandedOffers] = useState<Record<string, boolean>>({});
 
   const { state } = useAuthContext();
 
-  // Sample dummy data for offers
-  const dummyOffers: Offer[] = [
-    {
-      _id: "offer1",
-      product: {
-        _id: "product1",
-        name: "iPhone 13 Pro",
-        images: ["https://via.placeholder.com/150"],
-        price: 999.99,
-      },
-      buyer: {
-        _id: "buyer1",
-        name: "John Doe",
-        email: "john@example.com",
-      },
-      offeredPrice: 850.0,
-      status: "pending",
-      createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), // 2 days ago
-    },
-    {
-      _id: "offer2",
-      product: {
-        _id: "product2",
-        name: "MacBook Air M1",
-        images: ["https://via.placeholder.com/150"],
-        price: 1299.99,
-      },
-      buyer: {
-        _id: "buyer2",
-        name: "Jane Smith",
-        email: "jane@example.com",
-      },
-      offeredPrice: 1100.0,
-      status: "accepted",
-      createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), // 5 days ago
-    },
-    {
-      _id: "offer3",
-      product: {
-        _id: "product3",
-        name: "Sony PlayStation 5",
-        images: ["https://via.placeholder.com/150"],
-        price: 499.99,
-      },
-      buyer: {
-        _id: "buyer3",
-        name: "Mike Johnson",
-        email: "mike@example.com",
-      },
-      offeredPrice: 450.0,
-      status: "rejected",
-      createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(), // 10 days ago
-    },
-  ];
-
-  // Sample dummy data for comments
-  const dummyComments: Record<string, Comment[]> = {
-    offer1: [
-      {
-        id: "comment1",
-        offerId: "offer1",
-        userId: "seller1",
-        userName: "Seller",
-        message: "Thanks for your offer. Could you go a bit higher?",
-        timestamp: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-      },
-      {
-        id: "comment2",
-        offerId: "offer1",
-        userId: "buyer1",
-        userName: "John Doe",
-        message: "I can go up to $875. That's my best offer.",
-        timestamp: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
-      },
-    ],
-  };
-
-  // Initialize state with dummy data instead of fetching from backend
+  // Fetch offers from the backend
   useEffect(() => {
     setLoading(true);
+    const fetchOffers = async () => {
+      try {
+        const response = await fetch(
+          `${import.meta.env.VITE_API}/api/offers/my-offers`,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${state.user?.token}`,
+            },
+          }
+        );
+        if (!response.ok) {
+          throw new Error("Failed to fetch offers");
+        }
+        const data: Offer[] = await response.json();
+        setOffers(data);
+        
+        // Initialize comments, expanded state, and new comment fields
+        const initialComments: Record<string, Comment[]> = {};
+        const initialExpanded: Record<string, boolean> = {};
+        const initialNewComment: Record<string, string> = {};
 
-    // Set offers with dummy data
-    setOffers(dummyOffers);
+        data.forEach((offer) => {
+          initialComments[offer._id] = [];
+          initialExpanded[offer._id] = false;
+          initialNewComment[offer._id] = "";
+        });
 
-    // Initialize comments with dummy data
-    const initialComments: Record<string, Comment[]> = {};
-    const initialExpanded: Record<string, boolean> = {};
-    const initialNewComment: Record<string, string> = {};
+        setComments(initialComments);
+        setExpandedOffers(initialExpanded);
+        setNewComment(initialNewComment);
+      } catch (err) {
+        setError((err as Error).message);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    dummyOffers.forEach((offer) => {
-      initialComments[offer._id] = dummyComments[offer._id] || [];
-      initialExpanded[offer._id] = false;
-      initialNewComment[offer._id] = "";
-    });
+    if (state.user?.token) {
+      fetchOffers();
+    } else {
+      setLoading(false);
+    }
+  }, [state.user]);
 
-    setComments(initialComments);
-    setExpandedOffers(initialExpanded);
-    setNewComment(initialNewComment);
-    setLoading(false);
-  }, []);
-
-  // Handle offer response (accept/reject) - using dummy data
-  const handleOfferResponse = (
+  // Handle offer response (accept/reject)
+  const handleOfferResponse = async (
     offerId: string,
     status: "accepted" | "rejected"
   ) => {
-    // Simulate a short delay to mimic API call
-    setTimeout(() => {
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API}/api/offers/respond`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${state.user?.token}`,
+          },
+          body: JSON.stringify({ offerId, status }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to update offer status");
+      }
+
       // Update the offers list with the updated status
       setOffers((prevOffers) =>
         prevOffers.map((offer) =>
           offer._id === offerId ? { ...offer, status } : offer
         )
       );
-
-      // Show a success message (optional)
-      console.log(`Offer ${offerId} ${status} successfully`);
-    }, 300);
+    } catch (err) {
+      setError((err as Error).message);
+    }
   };
 
   // Toggle comment section visibility
@@ -151,31 +110,46 @@ const OffersPage = () => {
     }));
   };
 
-  // Add a new comment - using dummy data
-  const addComment = (offerId: string) => {
-    if (!newComment[offerId].trim()) return;
+  // Add a new comment
+  const addComment = async (offerId: string) => {
+    if (!newComment[offerId].trim() || !state.user?.token) return;
 
-    // Create a new comment object
-    const newCommentObj: Comment = {
-      id: `comment${Date.now()}`,
-      offerId,
-      userId: "current-user",
-      userName: state.user?.email || "You",
-      message: newComment[offerId],
-      timestamp: new Date().toISOString(),
-    };
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API}/api/comments`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${state.user?.token}`,
+          },
+          body: JSON.stringify({
+            offerId,
+            message: newComment[offerId],
+          }),
+        }
+      );
 
-    // Add comment to the list
-    setComments((prev) => ({
-      ...prev,
-      [offerId]: [...(prev[offerId] || []), newCommentObj],
-    }));
+      if (!response.ok) {
+        throw new Error("Failed to add comment");
+      }
 
-    // Clear the input
-    setNewComment((prev) => ({
-      ...prev,
-      [offerId]: "",
-    }));
+      const newCommentData = await response.json();
+
+      // Add comment to the list
+      setComments((prev) => ({
+        ...prev,
+        [offerId]: [...(prev[offerId] || []), newCommentData],
+      }));
+
+      // Clear the input
+      setNewComment((prev) => ({
+        ...prev,
+        [offerId]: "",
+      }));
+    } catch (err) {
+      setError((err as Error).message);
+    }
   };
 
   // Format date for display
@@ -207,20 +181,28 @@ const OffersPage = () => {
     <div className="w-[95%] mx-auto mb-[20rem]">
       <div className="absolute circlePosition w-screen sm:w-[590px] h-[400px] bg-gradient-to-r from-indigo-400 rounded-[100%] top-[70%] left-[50%]  blur-[90px] translate-x-[-50%] translate-y-[-50%] z-[-1]" />
       <div className="header my-4 h-12 px-10 flex items-center justify-center">
-        <h1 className="font-bold text-3xl">My <span className="text-indigo-600">Offers</span></h1>
+        <h1 className="font-bold text-3xl">
+          My <span className="text-indigo-600">Offers</span>
+        </h1>
       </div>
 
-      <OffersList
-        offers={offers}
-        comments={comments}
-        expandedOffers={expandedOffers}
-        newComment={newComment}
-        onToggleComments={toggleComments}
-        onOfferResponse={handleOfferResponse}
-        onCommentChange={handleCommentChange}
-        onAddComment={addComment}
-        formatDate={formatDate}
-      />
+      {offers.length === 0 ? (
+        <div className="text-center py-8">
+          <p className="text-lg text-gray-600">No offers found</p>
+        </div>
+      ) : (
+        <OffersList
+          offers={offers}
+          comments={comments}
+          expandedOffers={expandedOffers}
+          newComment={newComment}
+          onToggleComments={toggleComments}
+          onOfferResponse={handleOfferResponse}
+          onCommentChange={handleCommentChange}
+          onAddComment={addComment}
+          formatDate={formatDate}
+        />
+      )}
     </div>
   );
 };
